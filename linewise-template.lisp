@@ -445,7 +445,7 @@
   (let ((pop-expr `(setf ,$state$ (getf ,$state$ :outer-state))))
     (if inner pop-expr
         `(if (getf ,$state$ :eot)
-             ,(compile-yield-dest nil 'identity)
+             ,(compile-yield-dest nil ''identity)
              ,pop-expr))))
 
 (def-compiler-var $input$)
