@@ -5,10 +5,10 @@
 ;;;; Distributed under the BSD 3-clause license (see file LICENSE)
 
 (defpackage #:linewise-template
-  (:use #:cl #:cl-ppcre)
+  (:use #:cl #:cl-ppcre #:cl-fad)
   (:export #:*directive-circumfix* #:*directive-escape*
-           #:*directive-base-packages* #:process-template
-           #:*source-stream* #:*source-line-count*))
+           #:*directive-base-packages* #:*backup-pathname-suffix*
+           #:process-template #:*source-stream* #:*source-line-count*))
 
 (in-package #:linewise-template)
 
@@ -71,6 +71,9 @@
 (defvar *directive-base-packages* '(#:common-lisp)
   "List of packages which are to be used by the temporary package
    established for reading symbols in directives")
+
+(defvar *backup-pathname-suffix* "~"
+  "String added to file path in order to obtain the name of the backup file.")
 
 (defmacro with-temp-package (&body body)
   (let ((temp-package (gensym "PKG")))
@@ -163,6 +166,19 @@
   "Reference to an integer incremented for each line read, and reset for
    each subsequent source stream.")
 
+(def-compiler-var $file$)
+
+(def-compiler-var $tmp-file$)
+
+(defun backup-pathname (file)
+  (pathname (format nil "~A~A" file *backup-pathname-suffix*)))
+
+(defmacro with-temporary-output ((destination file) &body body)
+  `(let ((*default-pathname-defaults* (pathname ,file))
+         (template (file-namestring (make-pathname :type "lwt_%" :defaults ,file))))
+     (with-output-to-temporary-file (,destination :template template)
+       ,@body)))
+
 (defmacro with-input ((input-streams
                        &key file files string strings stream streams
                             (update nil)
@@ -179,8 +195,10 @@
              expected for template source specifier"))
     ((and update (not file))
      (error ":UPDATE is only allowed with :FILE sources")))
-  `(let* ((,input-streams
-            ,(cond (file `(list (open ,file)))
+  `(let* ((,$file$ ,file)
+          (,$tmp-file$ nil)
+          (,input-streams
+            ,(cond (file `(list (open ,$file$)))
                    (files `(mapcar-to-streams #'open ,files))
                    (string `(list (make-string-input-stream ,string)))
                    (strings `(mapcar-to-streams
@@ -197,14 +215,20 @@
                 (*source-stream* nil)
                 (*source-line-count* nil))
             ,(if update
-                 `(with-open-file (*destination* ,file
-                                    :direction :output
-                                    :if-exists ,(if backup :rename
-                                                    :rename-and-delete))
-                    ,@body)
+                 `(progn
+                    (setf ,$tmp-file$
+                          (with-temporary-output (*destination* ,$file$)
+                            ,@body))
+                    nil)
                  `(progn ,@body)))
        ,(unless (or stream streams)
-          `(mapc #'close ,input-streams)))))
+          `(mapc #'close ,input-streams))
+       ,(when update
+          `(when ,$tmp-file$
+             ,(when backup
+                `(copy-file ,$file$ (backup-pathname ,$file$) :overwrite t))
+             (delete-file ,$file$)
+             (rename-file ,$tmp-file$ ,$file$))))))
 
 (defun read-line* (streams)
   (when (consp streams)

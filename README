@@ -163,6 +163,12 @@ List of packages which are to be used by the temporary package established
 for reading symbols in directives.  Initial value is '(#:COMMON-LISP).
 
 
+{variable} *BACKUP-PATHNAME-SUFFIX*
+
+String added to file path in order to obtain the name of the backup file.
+Initial value is "~".
+
+
 {variable} *SOURCE-STREAM*
 
 Reference to the current source stream (the one from which a line most
