@@ -114,6 +114,7 @@
     (when (not (eq current-circumfix *directive-circumfix*))
       (update-scanner))
     (multiple-value-bind (start end rstarts rends) (scan scanner line)
+      (declare (ignore start end))
       (when rstarts
         (subseq line
           (aref rstarts sans-circumfix-reg-offset)
@@ -205,6 +206,7 @@
                                #'make-string-input-stream ,strings))
                    (stream `(list ,stream))
                    (streams))))
+     (declare (ignorable ,$file$ ,$tmp-file$))
      (unwind-protect
           (let (,@(when circumfix-p
                     `((*directive-circumfix* ,circumfix)))
@@ -289,6 +291,7 @@
                        &key ((:begin begin-handler))
                             ((:end end-handler))
                        &allow-other-keys)
+  (declare (ignore input))
 ; (format *trace-output* "In PROCESS-ATOMIC: RESIDUAL-LINE=~S~%"
 ;         residual-line)
   (assert (and begin-handler end-handler))
@@ -502,6 +505,8 @@
                                  ,@(compile-spec selector sibling-selectors
                                                  action detail))))
                `(lambda (,$residual-line$ ,$state$ ,$args ,$trailer)
+                  (declare (ignorable ,$residual-line$ ,$state$)
+                           (ignorable ,$args ,$trailer))
 ;                 (format *trace-output* "In sub-handler for ~S x ~S: ~
 ;                         $RESIDUAL-LINE$=~S $ARGS=~S~%"
 ;                         ',(and selector (subseq selector 0 2))
@@ -537,6 +542,7 @@
                 (let (($re (gensym "RE"))
                       ($name (gensym "NAME")))
                   `(lambda (,$line$ ,$state$)
+                     (declare (ignorable ,$line$ ,$state$))
 ;                    (format *trace-output*
 ;                            "In directive handler for ~S x ~S: $LINE$=~S~%"
 ;                            ',(and selector (subseq selector 0 2))
@@ -567,11 +573,13 @@
     (multiple-value-bind (dest-stream dest-var dest-fn)
         (validate-destination destination)
       `(:begin (lambda (,$line$ ,$state$)
+                 (declare (ignorable ,$line$))
                  ,(compile-push-state selector dest-stream
                                       '(make-string-output-stream))
                  ,(compile-copy-directive t preserve-directives)
                  ,$state$)
           :end (lambda (,$line$ ,$state$ &aux (,$residual-line$ nil))
+                 (declare (ignorable ,$line$ ,$state$ ,$residual-line$))
                  (when ,(compile-check-end selector sibling-selectors)
                    ,(compile-copy-directive selector preserve-directives)
                    ,(compile-yield-dest dest-var dest-fn)
@@ -590,10 +598,12 @@
                            ((:do expr)) preserve-directives subs)
         detail
       `(:begin (lambda (,$line$ ,$state$)
+                 (declare (ignorable ,$line$))
                  ,(compile-copy-directive t preserve-directives)
                  ,(if atomic $state$
                       (compile-push-state selector nil nil)))
           :end (lambda (,$line$ ,$state$ &aux (,$residual-line$ nil))
+                 (declare (ignorable ,$line$ ,$state$ ,$residual-line$))
                  (when ,(compile-check-end selector sibling-selectors)
                    ,(unless atomic
                       (compile-pop-state))
@@ -602,7 +612,9 @@
                    ,expr
                    (values ,$state$ ,$residual-line$)))
     :directive ,(compile-directive-handler subs selector sibling-selectors)
-        :plain (lambda (,$line$ ,$state$) ,$state$)))))
+        :plain (lambda (,$line$ ,$state$)
+                 (declare (ignore ,$line$))
+                 ,$state$)))))
 
 (defmethod compile-spec (selector sibling-selectors (action (eql :transform))
                          detail)
@@ -615,11 +627,13 @@
         (validate-destination destination)
       (let (($transformed (gensym "VAL")))
         `(:begin (lambda (,$line$ ,$state$)
+                   (declare (ignorable ,$line$ ,$state$))
                    ,(compile-push-state selector dest-stream
                                         '(make-string-output-stream))
                    ,(compile-copy-directive t preserve-directives)
                    ,(compile-push-state t '(make-string-output-stream) nil))
             :end (lambda (,$line$ ,$state$ &aux (,$residual-line$ nil))
+                   (declare (ignorable ,$line$ ,$state$))
                    (when ,(compile-check-end selector sibling-selectors)
                      (let ((,$transformed
                              ,(compile-yield-dest nil transform-fn)))
@@ -647,6 +661,7 @@
                     ,@subs))))
 
 (defmethod compile-spec :around (selector sibling-selectors action detail)
+  (declare (ignore sibling-selectors action))
   (if (and selector (atomic-selector selector))
       (bind-keys-and-suffix (&allow-other-keys subs) detail
         (if (null subs)
